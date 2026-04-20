@@ -70,6 +70,7 @@ const require = createRequire(import.meta.url);
 function resolveZcaJs() {
   const candidates = [
     process.env.ZCA_JS_PATH,
+    join(os.homedir(), ".npm-global/lib/node_modules/openclaw/node_modules/zca-js"),
     join(os.homedir(), ".nvm/versions/node", process.version, "lib/node_modules/openclaw/extensions/zalouser/node_modules/zca-js"),
     process.env.OPENCLAW_EXTENSIONS_DIR && join(process.env.OPENCLAW_EXTENSIONS_DIR, "zalouser/node_modules/zca-js"),
     join(process.cwd(), "node_modules/zca-js"),
