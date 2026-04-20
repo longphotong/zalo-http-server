@@ -91,6 +91,58 @@ curl -s -X POST http://localhost:3099/send-file \
   -d '{"to":"USER_ID","message":"Chú thích","files":["/path/to/image.png"]}'
 ```
 
+### `POST /send-batch`
+Gửi cùng một tin nhắn tới nhiều user/group tuần tự. Mỗi tin cách nhau 3000ms (tuỳ chỉnh được). Khi endpoint này đang chạy, các endpoint gửi tin khác (`/send`, `/send-file`) sẽ xếp hàng chờ.
+
+```bash
+# Gửi tới nhiều user
+curl -s -X POST http://localhost:3099/send-batch \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "Xin chào!",
+    "targets": ["USER_ID_1", "USER_ID_2", "USER_ID_3"]
+  }'
+
+# Gửi tới nhiều nhóm
+curl -s -X POST http://localhost:3099/send-batch \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "Thông báo!",
+    "targets": [
+      {"to": "GROUP_ID_1", "group": true},
+      {"to": "GROUP_ID_2", "group": true}
+    ]
+  }'
+
+# Mix user + group, delay tuỳ chỉnh (ms)
+curl -s -X POST http://localhost:3099/send-batch \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "Hello!",
+    "delay": 5000,
+    "targets": [
+      "USER_ID_1",
+      {"to": "GROUP_ID_1", "group": true}
+    ]
+  }'
+```
+
+Phản hồi:
+```json
+{
+  "ok": true,
+  "sent": 3,
+  "total": 3,
+  "results": [
+    { "to": "USER_ID_1", "ok": true, "msgId": "..." },
+    { "to": "USER_ID_2", "ok": true, "msgId": "..." },
+    { "to": "GROUP_ID_1", "ok": true, "msgId": "..." }
+  ]
+}
+```
+
+> Nếu gặp `SESSION_EXPIRED` ở bất kỳ tin nào, vòng lặp dừng ngay lập tức.
+
 ## Định dạng phản hồi
 
 Thành công:
