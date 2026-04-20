@@ -281,6 +281,48 @@ async function router(req, res, zalo) {
     }
   }
 
+  // POST /send-batch
+  if (method === "POST" && url === "/send-batch") {
+    let body;
+    try { body = await readBody(req); }
+    catch (err) { return reply(res, 400, { ok: false, error: err.message, code: "BAD_REQUEST" }); }
+
+    const { targets, message = "", delay = 3000 } = body;
+    if (!Array.isArray(targets) || targets.length === 0)
+      return reply(res, 400, { ok: false, error: 'Thiếu trường "targets" (mảng)', code: "BAD_REQUEST" });
+    if (!message)
+      return reply(res, 400, { ok: false, error: 'Thiếu trường "message"', code: "BAD_REQUEST" });
+
+    const results = [];
+    for (let i = 0; i < targets.length; i++) {
+      const entry = targets[i];
+      const to    = typeof entry === "string" ? entry : entry.to;
+      const group = typeof entry === "object" ? (entry.group ?? false) : false;
+
+      if (!to) {
+        results.push({ to, ok: false, error: "Thiếu trường to", code: "BAD_REQUEST" });
+        continue;
+      }
+
+      try {
+        const result = await withTimeout(zalo.sendMessage(to, message, [], group));
+        const msgId  = result?.message?.msgId ?? result?.msgId ?? "?";
+        console.log(`[send-batch] ✅ msgId=${msgId} → ${to} (${i + 1}/${targets.length})`);
+        results.push({ to, ok: true, msgId });
+      } catch (err) {
+        const { code, hint } = classifyError(err);
+        console.error(`[send-batch] ❌ ${code}: ${err.message} → ${to}`);
+        results.push({ to, ok: false, error: err.message, code, ...(hint ? { hint } : {}) });
+        if (code === "SESSION_EXPIRED") break;
+      }
+
+      if (i < targets.length - 1) await new Promise((r) => setTimeout(r, delay));
+    }
+
+    const allOk = results.every((r) => r.ok);
+    return reply(res, 200, { ok: allOk, sent: results.filter((r) => r.ok).length, total: targets.length, results });
+  }
+
   // POST /send-file
   if (method === "POST" && url === "/send-file") {
     let body;
@@ -322,7 +364,7 @@ async function main() {
 
   server.listen(PORT, HOST, () => {
     console.log(`[http] 🚀 Zalo HTTP server đang chạy tại http://${HOST}:${PORT}`);
-    console.log(`[http] Endpoints: GET /health  GET /me  POST /send  POST /send-file`);
+    console.log(`[http] Endpoints: GET /health  GET /me  POST /send  POST /send-file  POST /send-batch`);
   });
 
   for (const sig of ["SIGINT", "SIGTERM"]) {
