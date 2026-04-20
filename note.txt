@@ -1,0 +1,20 @@
+# Chạy server
+node main.mjs --port 3099 --profile default
+
+# Gửi text
+curl -s -X POST http://localhost:3099/send \
+  -H "Content-Type: application/json" \
+  -d '{"to":"281584108424179687","message":"Hello!"}'
+
+# Gửi file/ảnh
+curl -s -X POST http://localhost:3099/send-file \
+  -H "Content-Type: application/json" \
+  -d '{"to":"281584108424179687","message":"Caption","files":["/path/to/img.png"]}'
+
+# Health check
+curl http://localhost:3099/health
+
+# Gửi vào nhóm
+curl -s -X POST http://localhost:3099/send \
+  -H "Content-Type: application/json" \
+  -d '{"to":"GROUP_ID","message":"Hello nhóm!","group":true}'

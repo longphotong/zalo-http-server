@@ -1,0 +1,15 @@
+{
+  "name": "zalo-http-server",
+  "version": "1.0.0",
+  "description": "HTTP server bọc zca-js để gửi tin nhắn Zalo qua API cục bộ",
+  "type": "module",
+  "main": "main.mjs",
+  "scripts": {
+    "start": "node main.mjs"
+  },
+  "engines": {
+    "node": ">=20.6.0"
+  },
+  "keywords": ["zalo", "zca-js", "openclaw"],
+  "license": "MIT"
+}
