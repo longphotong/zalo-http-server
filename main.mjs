@@ -241,6 +241,24 @@ function errorResponse(res, err) {
   });
 }
 
+// ─── Send lock — serializes /send, /send-file, /send-batch ───────────────────
+
+let _sendQueue = Promise.resolve();
+let _sendQueueDepth = 0;
+
+function withSendLock(label, fn) {
+  _sendQueueDepth++;
+  const pos = _sendQueueDepth;
+  if (pos > 1) console.log(`[lock] ⏳ ${label} xếp hàng chờ (vị trí ${pos})`);
+  const slot = _sendQueue.then(async () => {
+    if (pos > 1) console.log(`[lock] ▶ ${label} bắt đầu chạy`);
+    try { return await fn(); }
+    finally { _sendQueueDepth--; }
+  });
+  _sendQueue = slot.catch(() => {});
+  return slot;
+}
+
 // ─── Router ──────────────────────────────────────────────────────────────────
 
 async function router(req, res, zalo) {
@@ -271,14 +289,16 @@ async function router(req, res, zalo) {
     const { to, message = "", group = false } = body;
     if (!to) return reply(res, 400, { ok: false, error: 'Thiếu trường "to"', code: "BAD_REQUEST" });
 
-    try {
-      const result = await withTimeout(zalo.sendMessage(to, message, [], group));
-      const msgId  = result?.message?.msgId ?? result?.msgId ?? "?";
-      console.log(`[send] ✅ msgId=${msgId} → ${to}`);
-      return reply(res, 200, { ok: true, msgId, result });
-    } catch (err) {
-      return errorResponse(res, err);
-    }
+    return withSendLock("/send", async () => {
+      try {
+        const result = await withTimeout(zalo.sendMessage(to, message, [], group));
+        const msgId  = result?.message?.msgId ?? result?.msgId ?? "?";
+        console.log(`[send] ✅ msgId=${msgId} → ${to}`);
+        reply(res, 200, { ok: true, msgId, result });
+      } catch (err) {
+        errorResponse(res, err);
+      }
+    });
   }
 
   // POST /send-batch
@@ -293,34 +313,36 @@ async function router(req, res, zalo) {
     if (!message)
       return reply(res, 400, { ok: false, error: 'Thiếu trường "message"', code: "BAD_REQUEST" });
 
-    const results = [];
-    for (let i = 0; i < targets.length; i++) {
-      const entry = targets[i];
-      const to    = typeof entry === "string" ? entry : entry.to;
-      const group = typeof entry === "object" ? (entry.group ?? false) : false;
+    return withSendLock("/send-batch", async () => {
+      const results = [];
+      for (let i = 0; i < targets.length; i++) {
+        const entry = targets[i];
+        const to    = typeof entry === "string" ? entry : entry.to;
+        const group = typeof entry === "object" ? (entry.group ?? false) : false;
 
-      if (!to) {
-        results.push({ to, ok: false, error: "Thiếu trường to", code: "BAD_REQUEST" });
-        continue;
+        if (!to) {
+          results.push({ to, ok: false, error: "Thiếu trường to", code: "BAD_REQUEST" });
+          continue;
+        }
+
+        try {
+          const result = await withTimeout(zalo.sendMessage(to, message, [], group));
+          const msgId  = result?.message?.msgId ?? result?.msgId ?? "?";
+          console.log(`[send-batch] ✅ msgId=${msgId} → ${to} (${i + 1}/${targets.length})`);
+          results.push({ to, ok: true, msgId });
+        } catch (err) {
+          const { code, hint } = classifyError(err);
+          console.error(`[send-batch] ❌ ${code}: ${err.message} → ${to}`);
+          results.push({ to, ok: false, error: err.message, code, ...(hint ? { hint } : {}) });
+          if (code === "SESSION_EXPIRED") break;
+        }
+
+        if (i < targets.length - 1) await new Promise((r) => setTimeout(r, delay));
       }
 
-      try {
-        const result = await withTimeout(zalo.sendMessage(to, message, [], group));
-        const msgId  = result?.message?.msgId ?? result?.msgId ?? "?";
-        console.log(`[send-batch] ✅ msgId=${msgId} → ${to} (${i + 1}/${targets.length})`);
-        results.push({ to, ok: true, msgId });
-      } catch (err) {
-        const { code, hint } = classifyError(err);
-        console.error(`[send-batch] ❌ ${code}: ${err.message} → ${to}`);
-        results.push({ to, ok: false, error: err.message, code, ...(hint ? { hint } : {}) });
-        if (code === "SESSION_EXPIRED") break;
-      }
-
-      if (i < targets.length - 1) await new Promise((r) => setTimeout(r, delay));
-    }
-
-    const allOk = results.every((r) => r.ok);
-    return reply(res, 200, { ok: allOk, sent: results.filter((r) => r.ok).length, total: targets.length, results });
+      const allOk = results.every((r) => r.ok);
+      reply(res, 200, { ok: allOk, sent: results.filter((r) => r.ok).length, total: targets.length, results });
+    });
   }
 
   // POST /send-file
@@ -333,15 +355,17 @@ async function router(req, res, zalo) {
     if (!to)           return reply(res, 400, { ok: false, error: '"to" is required',    code: "BAD_REQUEST" });
     if (!files.length) return reply(res, 400, { ok: false, error: 'Thiếu trường "files"', code: "BAD_REQUEST" });
 
-    try {
-      const result     = await withTimeout(zalo.sendMessage(to, message, files, group));
-      const msgId      = result?.message?.msgId ?? result?.msgId ?? "?";
-      const attachCount = result?.attachment?.length ?? 0;
-      console.log(`[send-file] ✅ msgId=${msgId}, attachments=${attachCount} → ${to}`);
-      return reply(res, 200, { ok: true, msgId, attachments: attachCount, result });
-    } catch (err) {
-      return errorResponse(res, err);
-    }
+    return withSendLock("/send-file", async () => {
+      try {
+        const result      = await withTimeout(zalo.sendMessage(to, message, files, group));
+        const msgId       = result?.message?.msgId ?? result?.msgId ?? "?";
+        const attachCount = result?.attachment?.length ?? 0;
+        console.log(`[send-file] ✅ msgId=${msgId}, attachments=${attachCount} → ${to}`);
+        reply(res, 200, { ok: true, msgId, attachments: attachCount, result });
+      } catch (err) {
+        errorResponse(res, err);
+      }
+    });
   }
 
   return reply(res, 404, { ok: false, error: "Không tìm thấy", code: "NOT_FOUND" });
