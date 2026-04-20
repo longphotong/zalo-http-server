@@ -170,6 +170,12 @@ class ZaloApi {
     console.log(`[session] ✅ Sẵn sàng (profile: ${this.profile})`);
   }
 
+  async sendTypingEvent(to, group = false) {
+    if (!this.api) throw new Error("SESSION_EXPIRED");
+    const threadType = group ? ThreadType.Group : ThreadType.User;
+    return this.api.sendTypingEvent(to, threadType);
+  }
+
   async sendMessage(to, msg, files = [], group = false) {
     if (!this.api) throw new Error("SESSION_EXPIRED");
 
@@ -307,7 +313,7 @@ async function router(req, res, zalo) {
     try { body = await readBody(req); }
     catch (err) { return reply(res, 400, { ok: false, error: err.message, code: "BAD_REQUEST" }); }
 
-    const { targets, message = "", delay = 3000 } = body;
+    const { targets, message = "", delay = 1000 } = body;
     if (!Array.isArray(targets) || targets.length === 0)
       return reply(res, 400, { ok: false, error: 'Thiếu trường "targets" (mảng)', code: "BAD_REQUEST" });
     if (!message)
@@ -326,6 +332,7 @@ async function router(req, res, zalo) {
         }
 
         try {
+          await zalo.sendTypingEvent(to, group).catch(() => {});
           const result = await withTimeout(zalo.sendMessage(to, message, [], group));
           const msgId  = result?.message?.msgId ?? result?.msgId ?? "?";
           console.log(`[send-batch] ✅ msgId=${msgId} → ${to} (${i + 1}/${targets.length})`);
