@@ -16,7 +16,28 @@ cp .env.example .env
 
 Server tự động tải `.env` khi khởi động — không cần cờ hay wrapper thêm.
 
-## Chạy server
+## Chạy như systemd service
+
+Service chạy ở user-level (không cần `sudo`), chỉ lắng nghe `127.0.0.1` — không mở ra ngoài.
+
+```bash
+# Cài service (chạy một lần)
+cp ~/.config/systemd/user/zalo-server.service  # đã có sẵn trong repo
+systemctl --user daemon-reload
+systemctl --user enable zalo-server
+systemctl --user start zalo-server
+```
+
+Các lệnh thường dùng:
+
+```bash
+systemctl --user status zalo-server   # kiểm tra trạng thái
+systemctl --user restart zalo-server  # khởi động lại
+systemctl --user stop zalo-server     # dừng
+journalctl --user -u zalo-server -f   # xem log realtime
+```
+
+## Chạy thủ công
 
 ```bash
 node main.mjs
