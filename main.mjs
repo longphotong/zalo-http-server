@@ -297,6 +297,7 @@ async function router(req, res, zalo) {
 
     return withSendLock("/send", async () => {
       try {
+        await zalo.sendTypingEvent(to, group).catch(() => {});
         const result = await withTimeout(zalo.sendMessage(to, message, [], group));
         const msgId  = result?.message?.msgId ?? result?.msgId ?? "?";
         console.log(`[send] ✅ msgId=${msgId} → ${to}`);
@@ -364,6 +365,7 @@ async function router(req, res, zalo) {
 
     return withSendLock("/send-file", async () => {
       try {
+        await zalo.sendTypingEvent(to, group).catch(() => {});
         const result      = await withTimeout(zalo.sendMessage(to, message, files, group));
         const msgId       = result?.message?.msgId ?? result?.msgId ?? "?";
         const attachCount = result?.attachment?.length ?? 0;
